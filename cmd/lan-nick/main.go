@@ -14,7 +14,9 @@ import (
 
 	"github.com/joey/lan-nicknames/internal/agent"
 	"github.com/joey/lan-nicknames/internal/config"
+	lanhosts "github.com/joey/lan-nicknames/internal/hosts"
 	lannetwork "github.com/joey/lan-nicknames/internal/network"
+	"github.com/joey/lan-nicknames/internal/service"
 	"github.com/joey/lan-nicknames/internal/store"
 )
 
@@ -40,8 +42,23 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("usage: lan-nick map")
 		}
 		return printMap(stdout)
+	case "install":
+		if len(arguments) != 1 {
+			return fmt.Errorf("usage: lan-nick install")
+		}
+		return installBackgroundService(stdout)
+	case "uninstall":
+		if len(arguments) != 1 {
+			return fmt.Errorf("usage: lan-nick uninstall")
+		}
+		return uninstallBackgroundService(stdout)
 	case "serve":
 		return serve(arguments[1:], stdout, stderr)
+	case "service-run":
+		if len(arguments) != 2 {
+			return fmt.Errorf("internal service runner requires a state directory")
+		}
+		return service.Run(arguments[1])
 	case "help", "-h", "--help":
 		printHelp(stdout)
 		return nil
@@ -91,7 +108,7 @@ func printMap(output io.Writer) error {
 		return err
 	}
 	if len(snapshot.Peers) == 0 {
-		fmt.Fprintln(output, "No active lan-nick machines found. Is 'lan-nick serve' running?")
+		fmt.Fprintln(output, "No active lan-nick machines found. Is the lan-nick service running?")
 		return nil
 	}
 	counts := make(map[string]int)
@@ -110,6 +127,38 @@ func printMap(output io.Writer) error {
 		}
 		fmt.Fprintf(output, "%s\t%s\t%s\n", alias, strings.Join(addresses, ", "), peer.Nickname)
 	}
+	return nil
+}
+
+func installBackgroundService(output io.Writer) error {
+	if _, err := config.LoadOrCreate(); err != nil {
+		return err
+	}
+	stateDir, err := config.Dir()
+	if err != nil {
+		return err
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("find current executable: %w", err)
+	}
+	if err := service.Install(executable, stateDir); err != nil {
+		return err
+	}
+	fmt.Fprintf(output, "Installed and started lan-nick with %s.\\n", service.ManagerName())
+	fmt.Fprintf(output, "Service executable: %s\\n", service.InstallPath())
+	fmt.Fprintf(output, "State directory: %s\\n", stateDir)
+	return nil
+}
+
+func uninstallBackgroundService(output io.Writer) error {
+	if err := service.Uninstall(); err != nil {
+		return err
+	}
+	if err := lanhosts.Sync(lanhosts.DefaultPath(), store.Snapshot{}); err != nil {
+		return fmt.Errorf("service removed, but host alias cleanup failed: %w", err)
+	}
+	fmt.Fprintf(output, "Stopped and uninstalled lan-nick from %s.\\n", service.ManagerName())
 	return nil
 }
 
@@ -157,14 +206,19 @@ Usage:
   lan-nick                         Show this machine's nickname and local IPs
   lan-nick rename "Living Room"   Change the nickname (alias: living-room)
   lan-nick map                     Show active nicknames, aliases, and IPs
-  lan-nick serve [options]         Advertise, discover, and maintain host aliases
+  lan-nick install                 Install and start the OS background service
+  lan-nick uninstall               Stop and remove the OS background service
+  lan-nick serve [options]         Run the agent in the foreground
 
-Run one long-lived 'lan-nick serve' process on every machine. Discovery uses
-link-local-scope multicast UDP and never crosses routers. Naked names such as
-'ssh root@living-room' work through a managed section in the OS hosts file.
-The serve process therefore needs permission to replace /etc/hosts on macOS
-and Linux, or the system hosts file on Windows. Use --no-hosts for discovery
-without host-file changes.
+Install once from an elevated shell so the service can maintain the OS hosts
+file. On macOS and Linux, run 'sudo lan-nick install'. On Windows, run
+'lan-nick install' in an Administrator terminal. The installer copies its
+current executable to a stable system location and starts it at boot.
+
+Discovery uses link-local-scope multicast UDP and never crosses routers. Naked
+names such as 'ssh root@living-room' work through a managed section in the OS
+hosts file. Use 'lan-nick serve --no-hosts' for foreground discovery without
+host-file changes.
 
 Host aliases contain lowercase ASCII letters, digits, and hyphens. Spaces and
 punctuation in display nicknames become hyphens. If two machines advertise the

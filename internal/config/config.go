@@ -32,6 +32,9 @@ func Dir() (string, error) {
 	if runtime.GOOS != "windows" {
 		if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" && sudoUser != "root" {
 			if account, err := user.Lookup(sudoUser); err == nil && account.HomeDir != "" {
+				if runtime.GOOS == "darwin" {
+					return filepath.Join(account.HomeDir, "Library", "Application Support", "lan-nick"), nil
+				}
 				return filepath.Join(account.HomeDir, ".config", "lan-nick"), nil
 			}
 		}
@@ -174,22 +177,28 @@ func Alias(nickname string) string {
 }
 
 // OwnForInvoker keeps state readable and writable by the ordinary user when
-// serve runs through sudo to gain hosts-file access.
+// serve runs through sudo or as a root-owned system service.
 func OwnForInvoker(path string) error {
 	if runtime.GOOS == "windows" {
 		return nil
 	}
-	uidText, gidText := os.Getenv("SUDO_UID"), os.Getenv("SUDO_GID")
-	if uidText == "" || gidText == "" {
+	uidText, gidText := os.Getenv("LAN_NICK_STATE_UID"), os.Getenv("LAN_NICK_STATE_GID")
+	if uidText == "" && gidText == "" {
+		uidText, gidText = os.Getenv("SUDO_UID"), os.Getenv("SUDO_GID")
+	}
+	if uidText == "" && gidText == "" {
 		return nil
+	}
+	if uidText == "" || gidText == "" {
+		return errors.New("state UID and GID must either both be set or both be empty")
 	}
 	uid, err := strconv.Atoi(uidText)
 	if err != nil {
-		return fmt.Errorf("parse SUDO_UID: %w", err)
+		return fmt.Errorf("parse state UID: %w", err)
 	}
 	gid, err := strconv.Atoi(gidText)
 	if err != nil {
-		return fmt.Errorf("parse SUDO_GID: %w", err)
+		return fmt.Errorf("parse state GID: %w", err)
 	}
 	if err := os.Chown(path, uid, gid); err != nil {
 		return fmt.Errorf("set state ownership for invoking user: %w", err)
