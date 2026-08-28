@@ -13,11 +13,7 @@ if [ "$(id -u)" -ne 0 ]; then
 	exec "$sudo_bin" -- "$script_path" "$@"
 fi
 
-invoking_user=${SUDO_USER:-}
-if [ -z "$invoking_user" ] || [ "$invoking_user" = root ]; then
-	printf '%s\n' "lan-nick: cannot determine the user who invoked sudo" >&2
-	exit 1
-fi
+invoking_user=${SUDO_USER:-root}
 
 cd "$script_dir"
 
@@ -38,15 +34,20 @@ if [ -z "$go_bin" ] || [ ! -x "$go_bin" ]; then
 	exit 1
 fi
 
-sudo_bin=$(command -v sudo || true)
-if [ -z "$sudo_bin" ]; then
-	printf '%s\n' "lan-nick: sudo is required to build as $invoking_user" >&2
-	exit 1
+if [ "$invoking_user" = root ]; then
+	run_as_invoking_user() {
+		"$@"
+	}
+else
+	sudo_bin=$(command -v sudo || true)
+	if [ -z "$sudo_bin" ]; then
+		printf '%s\n' "lan-nick: sudo is required to build as $invoking_user" >&2
+		exit 1
+	fi
+	run_as_invoking_user() {
+		"$sudo_bin" -H -u "$invoking_user" -- "$@"
+	}
 fi
-
-run_as_invoking_user() {
-	"$sudo_bin" -H -u "$invoking_user" -- "$@"
-}
 
 printf 'Building lan-nick for %s as %s...\n' "$(uname -s)/$(uname -m)" "$invoking_user"
 run_as_invoking_user "$go_bin" build -o "$script_dir/lan-nick" ./cmd/lan-nick
