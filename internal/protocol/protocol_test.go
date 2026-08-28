@@ -58,12 +58,13 @@ func TestValidateSSHHostKeyRejectsMismatchedBlobType(t *testing.T) {
 	}
 }
 
-func TestAnnouncementRoundTripPreservesSSHHostKey(t *testing.T) {
+func TestAnnouncementRoundTripPreservesMetadata(t *testing.T) {
 	announcement := Announcement{
 		Version:    Version,
 		ID:         "00112233445566778899aabbccddeeff",
 		Nickname:   "Dafni",
 		Alias:      "dafni",
+		Group:      "Upstairs",
 		SentAt:     time.Now().Unix(),
 		SSHHostKey: testSSHHostKey,
 	}
@@ -77,5 +78,8 @@ func TestAnnouncementRoundTripPreservesSSHHostKey(t *testing.T) {
 	}
 	if decoded.SSHHostKey != testSSHHostKey {
 		t.Fatalf("decoded SSH host key = %q, want %q", decoded.SSHHostKey, testSSHHostKey)
+	}
+	if decoded.Group != "Upstairs" {
+		t.Fatalf("decoded group = %q, want Upstairs", decoded.Group)
 	}
 }

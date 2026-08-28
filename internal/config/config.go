@@ -20,6 +20,7 @@ const fileName = "config.json"
 type Config struct {
 	ID       string `json:"id"`
 	Nickname string `json:"nickname"`
+	Group    string `json:"group,omitempty"`
 }
 
 func Dir() (string, error) {
@@ -140,6 +141,25 @@ func (cfg Config) Validate() error {
 	for _, r := range cfg.Nickname {
 		if unicode.IsControl(r) {
 			return errors.New("nickname cannot contain control characters")
+		}
+	}
+	return ValidateGroup(cfg.Group)
+
+}
+
+func ValidateGroup(group string) error {
+	if group == "" {
+		return nil
+	}
+	if strings.TrimSpace(group) == "" {
+		return errors.New("group cannot be blank")
+	}
+	if len([]byte(group)) > 128 {
+		return errors.New("group cannot exceed 128 bytes")
+	}
+	for _, r := range group {
+		if unicode.IsControl(r) {
+			return errors.New("group cannot contain control characters")
 		}
 	}
 	return nil

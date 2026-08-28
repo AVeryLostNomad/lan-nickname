@@ -91,6 +91,18 @@ Local IPs:
   192.168.1.20
 ```
 
+## Organize machines into groups
+
+Assign the current machine to a group:
+
+```bash
+lan-nick group "Upstairs"
+```
+
+Group names are created on first use. Run the command with the exact same name
+on another machine to place both beneath the same `lan-nick map` header.
+Machines without a group appear beneath `(Ungrouped)`.
+
 ## Install the background service
 
 The installer copies the current executable to a stable system location, registers it with the native service manager, starts it immediately, and configures it to start at boot.
@@ -248,7 +260,8 @@ lan-nick map
 Expected output resembles:
 
 ```text
-dafni	192.168.1.20	Dafni
+(Ungrouped):
+  dafni	192.168.1.20	Dafni
 ```
 
 ### 3. Verify hostname resolution
@@ -283,6 +296,7 @@ If `lan-nick map` does not discover the other machine:
 ```bash
 lan-nick                         # Show this machine's nickname and IP addresses
 lan-nick rename "Living Room"   # Change the nickname and alias
+lan-nick group "Upstairs"       # Assign this machine to a display group
 lan-nick map                     # Show active peers
 lan-nick serve                   # Run the agent in the foreground
 lan-nick serve --no-hosts        # Discover peers without changing host or SSH files

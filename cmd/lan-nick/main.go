@@ -38,6 +38,11 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("usage: lan-nick rename \"<new name>\"")
 		}
 		return rename(strings.Join(arguments[1:], " "), stdout)
+	case "group":
+		if len(arguments) < 2 {
+			return fmt.Errorf("usage: lan-nick group \"<name>\"")
+		}
+		return setGroup(strings.Join(arguments[1:], " "), stdout)
 	case "map":
 		if len(arguments) != 1 {
 			return fmt.Errorf("usage: lan-nick map")
@@ -103,6 +108,22 @@ func rename(nickname string, output io.Writer) error {
 	return nil
 }
 
+func setGroup(name string, output io.Writer) error {
+	cfg, err := config.LoadOrCreate()
+	if err != nil {
+		return err
+	}
+	cfg.Group = strings.TrimSpace(name)
+	if cfg.Group == "" {
+		return fmt.Errorf("group name cannot be empty")
+	}
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+	fmt.Fprintf(output, "Group: %s\n", cfg.Group)
+	return nil
+}
+
 func printMap(output io.Writer) error {
 	snapshot, err := store.ReadSnapshot(agent.DefaultTTL, time.Now())
 	if err != nil {
@@ -112,23 +133,48 @@ func printMap(output io.Writer) error {
 		fmt.Fprintln(output, "No active lan-nick machines found. Is the lan-nick service running?")
 		return nil
 	}
-	counts := make(map[string]int)
-	for _, peer := range snapshot.Peers {
-		counts[peer.Alias]++
-	}
-	for _, peer := range snapshot.Peers {
-		addresses := make([]string, 0, len(peer.Addresses))
-		for address := range peer.Addresses {
-			addresses = append(addresses, address)
-		}
-		sort.Strings(addresses)
-		alias := peer.Alias
-		if counts[peer.Alias] > 1 {
-			alias += " (collision; host alias disabled)"
-		}
-		fmt.Fprintf(output, "%s\t%s\t%s\n", alias, strings.Join(addresses, ", "), peer.Nickname)
-	}
+	printPeerMap(output, snapshot.Peers)
 	return nil
+}
+
+func printPeerMap(output io.Writer, peers []store.Peer) {
+	counts := make(map[string]int)
+	grouped := make(map[string][]store.Peer)
+	groupNames := make([]string, 0)
+	for _, peer := range peers {
+		counts[peer.Alias]++
+		if _, found := grouped[peer.Group]; !found && peer.Group != "" {
+			groupNames = append(groupNames, peer.Group)
+		}
+		grouped[peer.Group] = append(grouped[peer.Group], peer)
+	}
+	sort.Strings(groupNames)
+	if len(grouped[""]) > 0 {
+		groupNames = append(groupNames, "")
+	}
+
+	for groupIndex, group := range groupNames {
+		if groupIndex > 0 {
+			fmt.Fprintln(output)
+		}
+		heading := group
+		if heading == "" {
+			heading = "(Ungrouped)"
+		}
+		fmt.Fprintf(output, "%s:\n", heading)
+		for _, peer := range grouped[group] {
+			addresses := make([]string, 0, len(peer.Addresses))
+			for address := range peer.Addresses {
+				addresses = append(addresses, address)
+			}
+			sort.Strings(addresses)
+			alias := peer.Alias
+			if counts[peer.Alias] > 1 {
+				alias += " (collision; host alias disabled)"
+			}
+			fmt.Fprintf(output, "  %s\t%s\t%s\n", alias, strings.Join(addresses, ", "), peer.Nickname)
+		}
+	}
 }
 
 func installBackgroundService(output io.Writer) error {
@@ -214,6 +260,7 @@ func printHelp(output io.Writer) {
 Usage:
   lan-nick                         Show this machine's nickname and local IPs
   lan-nick rename "Living Room"   Change the nickname (alias: living-room)
+  lan-nick group "Upstairs"       Assign this machine to a display group
   lan-nick map                     Show active nicknames, aliases, and IPs
   lan-nick install                 Install and start the OS background service
   lan-nick uninstall               Stop and remove the OS background service

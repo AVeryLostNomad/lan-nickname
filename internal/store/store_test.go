@@ -61,3 +61,20 @@ func TestObservePersistsSSHHostKey(t *testing.T) {
 		t.Fatalf("stored SSH host key = %q, want %q", got, hostKey)
 	}
 }
+
+func TestObserveUpdatesGroupWithoutDroppingAddresses(t *testing.T) {
+	peers := New()
+	now := time.Now()
+	announcement := protocol.Announcement{ID: "id", Nickname: "Dafni", Alias: "dafni", Group: "Upstairs"}
+	peers.Observe(announcement, net.ParseIP("10.0.0.2"), now)
+	announcement.Group = "Downstairs"
+	peers.Observe(announcement, net.ParseIP("10.0.0.3"), now)
+
+	peer := peers.Snapshot().Peers[0]
+	if peer.Group != "Downstairs" {
+		t.Fatalf("stored group = %q, want Downstairs", peer.Group)
+	}
+	if len(peer.Addresses) != 2 {
+		t.Fatalf("group change retained %d addresses, want 2", len(peer.Addresses))
+	}
+}

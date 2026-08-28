@@ -31,6 +31,17 @@ func TestValidateRejectsHostFileControlCharacters(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsGroupControlCharacters(t *testing.T) {
+	cfg := Config{
+		ID:       "00112233445566778899aabbccddeeff",
+		Nickname: "safe",
+		Group:    "Upstairs\n(Ungrouped)",
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate accepted a group containing a newline")
+	}
+}
+
 func TestDirUsesInvokingUsersNativeConfigDirectoryUnderSudo(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("sudo path handling is Unix-only")

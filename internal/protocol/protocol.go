@@ -20,6 +20,7 @@ type Announcement struct {
 	ID         string `json:"id"`
 	Nickname   string `json:"nickname"`
 	Alias      string `json:"alias"`
+	Group      string `json:"group,omitempty"`
 	SentAt     int64  `json:"sent_at"`
 	SSHHostKey string `json:"ssh_host_key,omitempty"`
 }
@@ -30,6 +31,7 @@ func New(cfg config.Config, now time.Time) Announcement {
 		ID:       cfg.ID,
 		Nickname: cfg.Nickname,
 		Alias:    config.Alias(cfg.Nickname),
+		Group:    cfg.Group,
 		SentAt:   now.Unix(),
 	}
 }
@@ -70,6 +72,9 @@ func (announcement Announcement) Validate(_ time.Time) error {
 	}
 	if announcement.Alias != config.Alias(announcement.Nickname) {
 		return errors.New("alias does not match nickname")
+	}
+	if err := config.ValidateGroup(announcement.Group); err != nil {
+		return err
 	}
 	if err := ValidateSSHHostKey(announcement.SSHHostKey); err != nil {
 		return err

@@ -21,6 +21,7 @@ type Peer struct {
 	ID         string               `json:"id"`
 	Nickname   string               `json:"nickname"`
 	Alias      string               `json:"alias"`
+	Group      string               `json:"group,omitempty"`
 	SSHHostKey string               `json:"ssh_host_key,omitempty"`
 	Addresses  map[string]time.Time `json:"addresses"`
 }
@@ -89,6 +90,7 @@ func (store *Store) Observe(announcement protocol.Announcement, ip net.IP, now t
 		peer.Alias = announcement.Alias
 		peer.Addresses = make(map[string]time.Time)
 	}
+	peer.Group = announcement.Group
 	peer.SSHHostKey = announcement.SSHHostKey
 	peer.Addresses[address] = now
 }
@@ -117,6 +119,7 @@ func (store *Store) Snapshot() Snapshot {
 			ID:         peer.ID,
 			Nickname:   peer.Nickname,
 			Alias:      peer.Alias,
+			Group:      peer.Group,
 			SSHHostKey: peer.SSHHostKey,
 			Addresses:  make(map[string]time.Time, len(peer.Addresses)),
 		}
