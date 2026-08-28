@@ -163,7 +163,15 @@ sudo ./lan-nick serve
 
 ### Windows: Windows Service Manager
 
-Open PowerShell **as Administrator**, return to the directory containing `lan-nick.exe`, and run:
+From Git Bash, build the executable, install the CLI, and register the service with:
+
+```bash
+./win-install.sh
+```
+
+The script uses PowerShell to request Administrator access through the standard Windows UAC prompt; it does not require `sudo`.
+
+If you built the executable manually, open PowerShell **as Administrator**, return to the directory containing `lan-nick.exe`, and run:
 
 ```powershell
 .\lan-nick.exe install
