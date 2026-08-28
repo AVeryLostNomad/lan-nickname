@@ -72,6 +72,9 @@ func Run(ctx context.Context, options Options) error {
 		return fmt.Errorf("listen for LAN announcements on UDP %d: %w", options.Port, err)
 	}
 	defer udp.Close()
+	if err := enableBroadcast(udp); err != nil {
+		return fmt.Errorf("enable UDP broadcasts: %w", err)
+	}
 	packet := ipv4.NewPacketConn(udp)
 	defer packet.Close()
 	if err := packet.SetMulticastTTL(1); err != nil {
@@ -121,17 +124,23 @@ func Run(ctx context.Context, options Options) error {
 			return err
 		}
 		for _, local := range interfaces {
+			broadcast := &net.UDPAddr{IP: local.Broadcast, Port: options.Port}
 			sendMu.Lock()
-			err := packet.SetMulticastInterface(&local.Interface)
-			if err == nil {
-				_, err = packet.WriteTo(payload, nil, group)
+			multicastErr := packet.SetMulticastInterface(&local.Interface)
+			if multicastErr == nil {
+				_, multicastErr = packet.WriteTo(payload, nil, group)
 			}
+			_, broadcastErr := packet.WriteTo(payload, nil, broadcast)
 			sendMu.Unlock()
-			if err != nil {
-				fmt.Fprintf(options.Log, "lan-nick: cannot announce on %s: %v\n", local.Interface.Name, err)
-				continue
+			if multicastErr != nil {
+				fmt.Fprintf(options.Log, "lan-nick: cannot announce via multicast on %s: %v\n", local.Interface.Name, multicastErr)
 			}
-			peers.Observe(announcement, local.IPv4, time.Now())
+			if broadcastErr != nil {
+				fmt.Fprintf(options.Log, "lan-nick: cannot announce via broadcast on %s: %v\n", local.Interface.Name, broadcastErr)
+			}
+			if multicastErr == nil || broadcastErr == nil {
+				peers.Observe(announcement, local.IPv4, time.Now())
+			}
 		}
 		return nil
 	}

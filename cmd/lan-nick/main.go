@@ -215,8 +215,8 @@ file. On macOS and Linux, run 'sudo lan-nick install'. On Windows, run
 'lan-nick install' in an Administrator terminal. The installer copies its
 current executable to a stable system location and starts it at boot.
 
-Discovery uses link-local-scope multicast UDP and never crosses routers. Naked
-names such as 'ssh root@living-room' work through a managed section in the OS
+Discovery uses multicast and directed IPv4 broadcast and never crosses routers.
+Naked names such as 'ssh root@living-room' work through a managed section in the OS
 hosts file. Use 'lan-nick serve --no-hosts' for foreground discovery without
 host-file changes.
 

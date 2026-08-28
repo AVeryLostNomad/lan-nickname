@@ -22,10 +22,13 @@ Nicknames may contain spaces and punctuation. `lan-nick rename "Dafni Living Roo
 
 - Go 1.24 or newer when building from source.
 - Administrator access to install the background service and update the hosts file.
-- Machines connected to the same multicast-capable IPv4 LAN.
-- Inbound multicast UDP port `47777` permitted on trusted LAN interfaces.
+- Machines connected to the same IPv4 LAN.
+- Inbound UDP port `47777` permitted on trusted LAN interfaces.
 
-Discovery uses multicast address `239.255.77.77`, has a link-local TTL, and does not cross routers.
+Discovery sends each announcement to multicast address `239.255.77.77` and to
+the interface's directed broadcast address. Both stay on the local subnet and
+do not cross routers. The broadcast path preserves discovery on Wi-Fi networks
+that suppress multicast between clients.
 
 ## Build from source
 
@@ -257,9 +260,9 @@ If `lan-nick map` does not discover the other machine:
 
 1. Confirm both machines are on the same IPv4 LAN.
 2. Confirm both services are running.
-3. Permit inbound multicast UDP port `47777` on trusted interfaces.
+3. Permit inbound UDP port `47777` on trusted interfaces.
 4. On Windows, confirm the network profile is Private.
-5. Confirm the network does not isolate wireless clients or suppress multicast traffic.
+5. Confirm the network does not isolate wireless clients or suppress both multicast and broadcast traffic.
 
 ## Everyday commands
 

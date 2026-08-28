@@ -9,6 +9,7 @@ import (
 type Interface struct {
 	Interface net.Interface
 	IPv4      net.IP
+	Broadcast net.IP
 }
 
 func LocalIPs() ([]net.IP, error) {
@@ -61,12 +62,28 @@ func MulticastInterfaces() ([]Interface, error) {
 			continue
 		}
 		for _, address := range addresses {
-			ip, _, err := net.ParseCIDR(address.String())
-			if err == nil && ip.To4() != nil && ip.IsGlobalUnicast() {
-				result = append(result, Interface{Interface: iface, IPv4: ip.To4()})
+			ip, network, err := net.ParseCIDR(address.String())
+			if err != nil {
+				continue
+			}
+			ipv4 := ip.To4()
+			if ipv4 != nil && ip.IsGlobalUnicast() {
+				result = append(result, Interface{
+					Interface: iface,
+					IPv4:      ipv4,
+					Broadcast: broadcastAddress(ipv4, network.Mask),
+				})
 				break
 			}
 		}
 	}
 	return result, nil
+}
+
+func broadcastAddress(ip net.IP, mask net.IPMask) net.IP {
+	broadcast := make(net.IP, net.IPv4len)
+	for index := range broadcast {
+		broadcast[index] = ip[index] | ^mask[index]
+	}
+	return broadcast
 }
