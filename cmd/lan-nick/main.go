@@ -1,0 +1,173 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"sort"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/joey/lan-nicknames/internal/agent"
+	"github.com/joey/lan-nicknames/internal/config"
+	lannetwork "github.com/joey/lan-nicknames/internal/network"
+	"github.com/joey/lan-nicknames/internal/store"
+)
+
+func main() {
+	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
+		fmt.Fprintf(os.Stderr, "lan-nick: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run(arguments []string, stdout, stderr io.Writer) error {
+	if len(arguments) == 0 {
+		return status(stdout)
+	}
+	switch arguments[0] {
+	case "rename":
+		if len(arguments) < 2 {
+			return fmt.Errorf("usage: lan-nick rename \"<new name>\"")
+		}
+		return rename(strings.Join(arguments[1:], " "), stdout)
+	case "map":
+		if len(arguments) != 1 {
+			return fmt.Errorf("usage: lan-nick map")
+		}
+		return printMap(stdout)
+	case "serve":
+		return serve(arguments[1:], stdout, stderr)
+	case "help", "-h", "--help":
+		printHelp(stdout)
+		return nil
+	default:
+		return fmt.Errorf("unknown command %q; run 'lan-nick help'", arguments[0])
+	}
+}
+
+func status(output io.Writer) error {
+	cfg, err := config.LoadOrCreate()
+	if err != nil {
+		return err
+	}
+	addresses, err := lannetwork.LocalIPs()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(output, "Nickname: %s\n", cfg.Nickname)
+	fmt.Fprintf(output, "Host alias: %s\n", config.Alias(cfg.Nickname))
+	fmt.Fprintln(output, "Local IPs:")
+	if len(addresses) == 0 {
+		fmt.Fprintln(output, "  (none)")
+	}
+	for _, address := range addresses {
+		fmt.Fprintf(output, "  %s\n", address)
+	}
+	return nil
+}
+
+func rename(nickname string, output io.Writer) error {
+	cfg, err := config.LoadOrCreate()
+	if err != nil {
+		return err
+	}
+	cfg.Nickname = strings.TrimSpace(nickname)
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+	fmt.Fprintf(output, "Nickname: %s\n", cfg.Nickname)
+	fmt.Fprintf(output, "Host alias: %s\n", config.Alias(cfg.Nickname))
+	return nil
+}
+
+func printMap(output io.Writer) error {
+	snapshot, err := store.ReadSnapshot(agent.DefaultTTL, time.Now())
+	if err != nil {
+		return err
+	}
+	if len(snapshot.Peers) == 0 {
+		fmt.Fprintln(output, "No active lan-nick machines found. Is 'lan-nick serve' running?")
+		return nil
+	}
+	counts := make(map[string]int)
+	for _, peer := range snapshot.Peers {
+		counts[peer.Alias]++
+	}
+	for _, peer := range snapshot.Peers {
+		addresses := make([]string, 0, len(peer.Addresses))
+		for address := range peer.Addresses {
+			addresses = append(addresses, address)
+		}
+		sort.Strings(addresses)
+		alias := peer.Alias
+		if counts[peer.Alias] > 1 {
+			alias += " (collision; host alias disabled)"
+		}
+		fmt.Fprintf(output, "%s\t%s\t%s\n", alias, strings.Join(addresses, ", "), peer.Nickname)
+	}
+	return nil
+}
+
+func serve(arguments []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	interval := flags.Duration("interval", agent.DefaultInterval, "announcement interval")
+	ttl := flags.Duration("ttl", agent.DefaultTTL, "time before a silent peer expires")
+	port := flags.Int("port", agent.DefaultPort, "UDP discovery port")
+	hostsPath := flags.String("hosts-file", "", "hosts file path (defaults to the OS hosts file)")
+	noHosts := flags.Bool("no-hosts", false, "discover peers without changing the hosts file")
+	if err := flags.Parse(arguments); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 {
+		return fmt.Errorf("usage: lan-nick serve [options]")
+	}
+
+	cfg, err := config.LoadOrCreate()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "Advertising %q as %s every %s on UDP %d\n", cfg.Nickname, config.Alias(cfg.Nickname), *interval, *port)
+	if *noHosts {
+		fmt.Fprintln(stdout, "Host-file synchronization is disabled.")
+	} else {
+		fmt.Fprintln(stdout, "Host-file synchronization is enabled; administrator privileges are normally required.")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return agent.Run(ctx, agent.Options{
+		Port:      *port,
+		Interval:  *interval,
+		TTL:       *ttl,
+		HostsPath: *hostsPath,
+		SyncHosts: !*noHosts,
+		Log:       stderr,
+	})
+}
+
+func printHelp(output io.Writer) {
+	fmt.Fprint(output, `lan-nick discovers machine nicknames on the local IPv4 LAN.
+
+Usage:
+  lan-nick                         Show this machine's nickname and local IPs
+  lan-nick rename "Living Room"   Change the nickname (alias: living-room)
+  lan-nick map                     Show active nicknames, aliases, and IPs
+  lan-nick serve [options]         Advertise, discover, and maintain host aliases
+
+Run one long-lived 'lan-nick serve' process on every machine. Discovery uses
+link-local-scope multicast UDP and never crosses routers. Naked names such as
+'ssh root@living-room' work through a managed section in the OS hosts file.
+The serve process therefore needs permission to replace /etc/hosts on macOS
+and Linux, or the system hosts file on Windows. Use --no-hosts for discovery
+without host-file changes.
+
+Host aliases contain lowercase ASCII letters, digits, and hyphens. Spaces and
+punctuation in display nicknames become hyphens. If two machines advertise the
+same alias, lan-nick reports the collision and installs neither mapping.
+`)
+}
