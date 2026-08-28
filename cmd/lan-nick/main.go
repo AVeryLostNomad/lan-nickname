@@ -17,6 +17,7 @@ import (
 	lanhosts "github.com/joey/lan-nicknames/internal/hosts"
 	lannetwork "github.com/joey/lan-nicknames/internal/network"
 	"github.com/joey/lan-nicknames/internal/service"
+	"github.com/joey/lan-nicknames/internal/sshconfig"
 	"github.com/joey/lan-nicknames/internal/store"
 )
 
@@ -155,8 +156,16 @@ func uninstallBackgroundService(output io.Writer) error {
 	if err := service.Uninstall(); err != nil {
 		return err
 	}
-	if err := lanhosts.Sync(lanhosts.DefaultPath(), store.Snapshot{}); err != nil {
-		return fmt.Errorf("service removed, but host alias cleanup failed: %w", err)
+	hostsErr := lanhosts.Sync(lanhosts.DefaultPath(), store.Snapshot{})
+	sshErr := sshconfig.Sync(sshconfig.DefaultPaths(), store.Snapshot{})
+	if hostsErr != nil && sshErr != nil {
+		return fmt.Errorf("service removed, but host and SSH alias cleanup failed: hosts: %v; SSH: %w", hostsErr, sshErr)
+	}
+	if hostsErr != nil {
+		return fmt.Errorf("service removed, but host alias cleanup failed: %w", hostsErr)
+	}
+	if sshErr != nil {
+		return fmt.Errorf("service removed, but SSH alias cleanup failed: %w", sshErr)
 	}
 	fmt.Fprintf(output, "Stopped and uninstalled lan-nick from %s.\\n", service.ManagerName())
 	return nil
@@ -169,7 +178,7 @@ func serve(arguments []string, stdout, stderr io.Writer) error {
 	ttl := flags.Duration("ttl", agent.DefaultTTL, "time before a silent peer expires")
 	port := flags.Int("port", agent.DefaultPort, "UDP discovery port")
 	hostsPath := flags.String("hosts-file", "", "hosts file path (defaults to the OS hosts file)")
-	noHosts := flags.Bool("no-hosts", false, "discover peers without changing the hosts file")
+	noHosts := flags.Bool("no-hosts", false, "discover peers without changing host or SSH files")
 	if err := flags.Parse(arguments); err != nil {
 		return err
 	}
@@ -183,9 +192,9 @@ func serve(arguments []string, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "Advertising %q as %s every %s on UDP %d\n", cfg.Nickname, config.Alias(cfg.Nickname), *interval, *port)
 	if *noHosts {
-		fmt.Fprintln(stdout, "Host-file synchronization is disabled.")
+		fmt.Fprintln(stdout, "Host and SSH configuration synchronization is disabled.")
 	} else {
-		fmt.Fprintln(stdout, "Host-file synchronization is enabled; administrator privileges are normally required.")
+		fmt.Fprintln(stdout, "Host and SSH configuration synchronization is enabled; administrator privileges are normally required.")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -216,9 +225,9 @@ file. On macOS and Linux, run 'sudo lan-nick install'. On Windows, run
 current executable to a stable system location and starts it at boot.
 
 Discovery uses multicast and directed IPv4 broadcast and never crosses routers.
-Naked names such as 'ssh root@living-room' work through a managed section in the OS
-hosts file. Use 'lan-nick serve --no-hosts' for foreground discovery without
-host-file changes.
+Naked names such as 'ssh root@living-room' work through managed OS host and
+SSH configuration. Advertised SSH host keys are trusted automatically. Use
+'lan-nick serve --no-hosts' for discovery without changing system files.
 
 Host aliases contain lowercase ASCII letters, digits, and hyphens. Spaces and
 punctuation in display nicknames become hyphens. If two machines advertise the

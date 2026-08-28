@@ -46,3 +46,18 @@ func TestPruneExpiresAddressesIndependently(t *testing.T) {
 		t.Fatal("Prune removed a current address")
 	}
 }
+
+func TestObservePersistsSSHHostKey(t *testing.T) {
+	const hostKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN5jmvbSg4KOMAzZzqDLbP2vZ1b93I8+JHwbpdDa9rxZ"
+	peers := New()
+	peers.Observe(protocol.Announcement{
+		ID:         "00112233445566778899aabbccddeeff",
+		Nickname:   "Dafni",
+		Alias:      "dafni",
+		SSHHostKey: hostKey,
+	}, net.ParseIP("192.168.1.91"), time.Now())
+
+	if got := peers.Snapshot().Peers[0].SSHHostKey; got != hostKey {
+		t.Fatalf("stored SSH host key = %q, want %q", got, hostKey)
+	}
+}

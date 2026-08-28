@@ -117,6 +117,8 @@ The installer creates:
 - Service executable: `/Library/PrivilegedHelperTools/lan-nick`
 - LaunchDaemon: `/Library/LaunchDaemons/dev.lan-nick.agent.plist`
 - User state: `~/Library/Application Support/lan-nick`
+- SSH client aliases: `/etc/ssh/ssh_config.d/90-lan-nick.conf`
+- Automatically trusted SSH keys: `/etc/ssh/ssh_known_hosts`
 
 If the macOS application firewall blocks discovery, allow incoming connections for:
 
@@ -148,6 +150,8 @@ The installer creates:
 - Service executable: `/usr/local/libexec/lan-nick`
 - systemd unit: `/etc/systemd/system/lan-nick.service`
 - User state: `~/.config/lan-nick`
+- SSH client aliases: `/etc/ssh/ssh_config.d/90-lan-nick.conf`
+- Automatically trusted SSH keys: `/etc/ssh/ssh_known_hosts`
 
 If a host firewall is enabled, permit inbound UDP port `47777` on trusted LAN interfaces. Firewall management differs between Linux distributions, so the installer does not modify Linux firewall rules.
 
@@ -171,6 +175,8 @@ The installer creates:
 - Service executable: `%ProgramFiles%\lan-nick\lan-nick.exe`
 - An Application event-log source named `LanNick`
 - A private-network inbound Windows Firewall rule for UDP port `47777`, restricted to the installed executable
+- SSH client aliases: `%ProgramData%\ssh\ssh_config`
+- Automatically trusted SSH keys: `%ProgramData%\ssh\ssh_known_hosts`
 
 Ensure Windows classifies the connected LAN as **Private**. The installed firewall rule intentionally does not enable discovery on Public networks.
 
@@ -246,7 +252,7 @@ ping dafni
 ssh root@dafni
 ```
 
-The operating system should resolve `dafni` to the IP shown by `lan-nick map`. The target machine must separately have the requested service, such as SSH, enabled.
+The operating system should resolve `dafni` to the IP shown by `lan-nick map`. If the target advertises a readable OpenSSH host public key, lan-nick configures the system SSH client to use IPv4 and automatically trusts that key under the machine's stable lan-nick ID. The target machine must separately have the requested service, such as SSH, enabled.
 
 ### Troubleshooting verification failures
 
@@ -271,12 +277,12 @@ lan-nick                         # Show this machine's nickname and IP addresses
 lan-nick rename "Living Room"   # Change the nickname and alias
 lan-nick map                     # Show active peers
 lan-nick serve                   # Run the agent in the foreground
-lan-nick serve --no-hosts        # Discover peers without changing the hosts file
+lan-nick serve --no-hosts        # Discover peers without changing host or SSH files
 ```
 
 ## Uninstall
 
-Uninstallation stops the service, removes its installed system binary and service definition, and clears the managed hosts-file mappings. It preserves the user's nickname and cached state directory.
+Uninstallation stops the service, removes its installed system binary and service definition, and clears the managed hosts-file, SSH-client, and SSH-known-hosts mappings. It preserves the user's nickname and cached state directory.
 
 <a id="uninstall-macos"></a>
 
@@ -318,6 +324,6 @@ From an Administrator PowerShell:
 
 ## Security model
 
-`lan-nick` accepts nickname announcements from the local LAN. It derives a peer's IP from the UDP packet source rather than trusting an advertised address, prevents nicknames from overriding fully qualified domain names, and disables aliases claimed by multiple machines.
+`lan-nick` accepts nickname announcements from the local LAN. It derives a peer's IP from the UDP packet source rather than trusting an advertised address, prevents nicknames from overriding fully qualified domain names, and disables aliases claimed by multiple machines. When a peer advertises an SSH host public key, lan-nick writes that key to the system known-hosts file and configures the alias to use it without an interactive trust prompt. The stable machine ID keeps that trust working when the peer's IPv4 address changes.
 
-Announcements are not authenticated. A device on the same LAN can claim a previously unused single-label nickname. Use `lan-nick` only on networks whose participants you trust, and continue verifying SSH host keys and other application-level credentials.
+Announcements and advertised SSH keys are not authenticated. A device on the same LAN can claim a previously unused nickname and make its SSH key trusted for that alias. Use this automatic trust only on LANs whose participants you trust; an untrusted LAN participant can impersonate a lan-nick SSH destination.

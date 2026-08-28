@@ -10,14 +10,18 @@ import (
 	"github.com/joey/lan-nicknames/internal/config"
 )
 
-const Version = 1
+const (
+	Version             = 1
+	maxAnnouncementSize = 1536
+)
 
 type Announcement struct {
-	Version  int    `json:"v"`
-	ID       string `json:"id"`
-	Nickname string `json:"nickname"`
-	Alias    string `json:"alias"`
-	SentAt   int64  `json:"sent_at"`
+	Version    int    `json:"v"`
+	ID         string `json:"id"`
+	Nickname   string `json:"nickname"`
+	Alias      string `json:"alias"`
+	SentAt     int64  `json:"sent_at"`
+	SSHHostKey string `json:"ssh_host_key,omitempty"`
 }
 
 func New(cfg config.Config, now time.Time) Announcement {
@@ -38,8 +42,8 @@ func (announcement Announcement) Encode() ([]byte, error) {
 }
 
 func Decode(payload []byte, now time.Time) (Announcement, error) {
-	if len(payload) > 1024 {
-		return Announcement{}, errors.New("announcement exceeds 1024 bytes")
+	if len(payload) > maxAnnouncementSize {
+		return Announcement{}, fmt.Errorf("announcement exceeds %d bytes", maxAnnouncementSize)
 	}
 	var announcement Announcement
 	if err := json.Unmarshal(payload, &announcement); err != nil {
@@ -66,6 +70,9 @@ func (announcement Announcement) Validate(_ time.Time) error {
 	}
 	if announcement.Alias != config.Alias(announcement.Nickname) {
 		return errors.New("alias does not match nickname")
+	}
+	if err := ValidateSSHHostKey(announcement.SSHHostKey); err != nil {
+		return err
 	}
 	return nil
 }

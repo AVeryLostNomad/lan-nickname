@@ -18,10 +18,11 @@ import (
 const cacheFileName = "peers.json"
 
 type Peer struct {
-	ID        string               `json:"id"`
-	Nickname  string               `json:"nickname"`
-	Alias     string               `json:"alias"`
-	Addresses map[string]time.Time `json:"addresses"`
+	ID         string               `json:"id"`
+	Nickname   string               `json:"nickname"`
+	Alias      string               `json:"alias"`
+	SSHHostKey string               `json:"ssh_host_key,omitempty"`
+	Addresses  map[string]time.Time `json:"addresses"`
 }
 
 type Snapshot struct {
@@ -88,6 +89,7 @@ func (store *Store) Observe(announcement protocol.Announcement, ip net.IP, now t
 		peer.Alias = announcement.Alias
 		peer.Addresses = make(map[string]time.Time)
 	}
+	peer.SSHHostKey = announcement.SSHHostKey
 	peer.Addresses[address] = now
 }
 
@@ -112,10 +114,11 @@ func (store *Store) Snapshot() Snapshot {
 	peers := make([]Peer, 0, len(store.peers))
 	for _, peer := range store.peers {
 		copy := Peer{
-			ID:        peer.ID,
-			Nickname:  peer.Nickname,
-			Alias:     peer.Alias,
-			Addresses: make(map[string]time.Time, len(peer.Addresses)),
+			ID:         peer.ID,
+			Nickname:   peer.Nickname,
+			Alias:      peer.Alias,
+			SSHHostKey: peer.SSHHostKey,
+			Addresses:  make(map[string]time.Time, len(peer.Addresses)),
 		}
 		for address, lastSeen := range peer.Addresses {
 			copy.Addresses[address] = lastSeen

@@ -14,6 +14,7 @@ import (
 	lanhosts "github.com/joey/lan-nicknames/internal/hosts"
 	lannetwork "github.com/joey/lan-nicknames/internal/network"
 	"github.com/joey/lan-nicknames/internal/protocol"
+	"github.com/joey/lan-nicknames/internal/sshconfig"
 	"github.com/joey/lan-nicknames/internal/store"
 )
 
@@ -29,6 +30,7 @@ type Options struct {
 	Interval  time.Duration
 	TTL       time.Duration
 	HostsPath string
+	SSHPaths  sshconfig.Paths
 	SyncHosts bool
 	Log       io.Writer
 }
@@ -51,6 +53,9 @@ func Run(ctx context.Context, options Options) error {
 	if options.HostsPath == "" {
 		options.HostsPath = lanhosts.DefaultPath()
 	}
+	if options.SSHPaths == (sshconfig.Paths{}) {
+		options.SSHPaths = sshconfig.DefaultPaths()
+	}
 	if options.Log == nil {
 		options.Log = io.Discard
 	}
@@ -59,6 +64,11 @@ func Run(ctx context.Context, options Options) error {
 	}
 	if options.TTL <= options.Interval*2 {
 		return fmt.Errorf("peer TTL must be more than twice the announcement interval")
+	}
+
+	sshHostKey, err := loadSSHHostKey()
+	if err != nil {
+		fmt.Fprintf(options.Log, "lan-nick: SSH host key discovery disabled: %v\n", err)
 	}
 
 	peers, err := store.Load()
@@ -119,6 +129,7 @@ func Run(ctx context.Context, options Options) error {
 			return err
 		}
 		announcement := protocol.New(cfg, time.Now())
+		announcement.SSHHostKey = sshHostKey
 		payload, err := announcement.Encode()
 		if err != nil {
 			return err
@@ -151,8 +162,12 @@ func Run(ctx context.Context, options Options) error {
 			fmt.Fprintf(options.Log, "lan-nick: save peer map: %v\n", err)
 		}
 		if options.SyncHosts {
-			if err := lanhosts.Sync(options.HostsPath, peers.Snapshot()); err != nil {
+			snapshot := peers.Snapshot()
+			if err := lanhosts.Sync(options.HostsPath, snapshot); err != nil {
 				fmt.Fprintf(options.Log, "lan-nick: sync host aliases: %v\n", err)
+			}
+			if err := sshconfig.Sync(options.SSHPaths, snapshot); err != nil {
+				fmt.Fprintf(options.Log, "lan-nick: sync SSH aliases: %v\n", err)
 			}
 		}
 	}

@@ -1,9 +1,16 @@
 #!/bin/sh
 set -eu
 
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+script_path=$script_dir/$(basename -- "$0")
+
 if [ "$(id -u)" -ne 0 ]; then
-	printf '%s\n' "lan-nick: run this script with sudo: sudo ./install.sh" >&2
-	exit 1
+	sudo_bin=$(command -v sudo || true)
+	if [ -z "$sudo_bin" ]; then
+		printf '%s\n' "lan-nick: sudo is required to install the background service" >&2
+		exit 1
+	fi
+	exec "$sudo_bin" -- "$script_path" "$@"
 fi
 
 invoking_user=${SUDO_USER:-}
@@ -12,7 +19,6 @@ if [ -z "$invoking_user" ] || [ "$invoking_user" = root ]; then
 	exit 1
 fi
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$script_dir"
 
 go_bin=${GO_BIN:-}
